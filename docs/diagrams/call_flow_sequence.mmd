@@ -1,0 +1,39 @@
+```mermaid
+sequenceDiagram
+  participant Caller
+  participant Twilio as Twilio SIP
+  participant Gateway as Telephony Gateway
+  participant LiveKit as LiveKit SFU
+  participant Agent as Agent Runtime
+  participant STT as Deepgram STT
+  participant LLM as OpenAI Realtime LLM
+  participant KB as Knowledge Service
+  participant TTS as OpenAI Voice
+
+  Caller->>Twilio: Dial DID
+  Twilio->>Gateway: HTTP POST /twilio/voice (call metadata)
+  activate Gateway
+  Gateway->>LiveKit: Ensure room + SIP ingress
+  Gateway->>Twilio: TwiML Dial SIP URI
+  deactivate Gateway
+
+  Twilio->>LiveKit: SIP INVITE (media proxied)
+  LiveKit->>Agent: WebRTC media stream
+
+  loop Conversation Turn
+    Agent->>STT: Stream audio frames
+    STT-->>Agent: Partial transcripts
+    Agent->>LLM: Prompt (transcript + context)
+    Agent->>KB: Retrieve domain knowledge (if needed)
+    KB-->>Agent: Answer snippets
+    LLM-->>Agent: Response text + directives
+    Agent->>TTS: Stream response for synthesis
+    TTS-->>Agent: Audio frames + barge-in controls
+    Agent->>LiveKit: Send audio to caller
+    LiveKit-->>Caller: Render synthesized speech
+  end
+
+  Twilio->>Gateway: Status callback (completed)
+  Gateway->>LiveKit: Notify room cleanup
+  Gateway->>Agent: Notify session end
+```

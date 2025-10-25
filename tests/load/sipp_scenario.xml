@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SIPp scenario placeholder for PSTN load testing -->
+<scenario name="PSTN Voice Agent Load">
+  <send retrans="500">
+    <![CDATA[
+    INVITE sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+    Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+    From: <sip:+15551230000@[local_ip]>;tag=[call_number]
+    To: <sip:[service]@[remote_ip]>
+    Call-ID: [call_id]
+    CSeq: 1 INVITE
+    Contact: <sip:+15551230000@[local_ip]:[local_port]>
+    Max-Forwards: 70
+    Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="100" optional="true"/>
+  <recv response="180" optional="true"/>
+  <recv response="200" next="ack"/>
+
+  <send name="ack">
+    <![CDATA[
+    ACK sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+    Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+    From: <sip:+15551230000@[local_ip]>;tag=[call_number]
+    To: <sip:[service]@[remote_ip]>;tag=[peer_tag]
+    Call-ID: [call_id]
+    CSeq: 1 ACK
+    Contact: <sip:+15551230000@[local_ip]:[local_port]>
+    Max-Forwards: 70
+    Content-Length: 0
+    ]]>
+  </send>
+
+  <pause milliseconds="30000"/>
+
+  <send>
+    <![CDATA[
+    BYE sip:[service]@[remote_ip]:[remote_port] SIP/2.0
+    Via: SIP/2.0/UDP [local_ip]:[local_port];branch=[branch]
+    From: <sip:+15551230000@[local_ip]>;tag=[call_number]
+    To: <sip:[service]@[remote_ip]>;tag=[peer_tag]
+    Call-ID: [call_id]
+    CSeq: 2 BYE
+    Max-Forwards: 70
+    Content-Length: 0
+    ]]>
+  </send>
+
+  <recv response="200"/>
+</scenario>

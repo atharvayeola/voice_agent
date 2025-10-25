@@ -1,0 +1,13 @@
+{
+  "name": "voice-agent-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run typecheck",
+    "dev:gateway": "pnpm --filter @voice-agent/gateway dev",
+    "test": "pnpm -r run test",
+    "smoke:gateway": "node scripts/run_gateway_smoke.mjs",
+    "validate:objectives": "node scripts/validate-objectives.mjs"
+  }
+}

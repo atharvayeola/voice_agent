@@ -1,0 +1,264 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: voice_agent
+      POSTGRES_PASSWORD: voice_agent
+      POSTGRES_DB: voice_agent
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.1
+    restart: unless-stopped
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+      QDRANT__SERVICE__HTTP_PORT: 6333
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+
+  livekit:
+    image: livekit/livekit-server:v1.6.2
+    restart: unless-stopped
+    depends_on:
+      - redis
+    environment:
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: devsecret
+      LIVEKIT_LOG_LEVEL: info
+      LIVEKIT_REDIS_ADDRESS: redis:6379
+      LIVEKIT_WEBHOOK_URL: http://gateway:8080/livekit/webhook
+    ports:
+      - "7880:7880" # WebRTC signal
+      - "7881:7881" # Admin API
+      - "7980:7980/udp" # RTP ingress
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    volumes:
+      - ./../observability/prom/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  loki:
+    image: grafana/loki:3.0.0
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+      - ./../observability/loki/local-config.yaml:/etc/loki/local-config.yaml:ro
+    ports:
+      - "3100:3100"
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+      - loki
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+
+  tempo:
+    image: grafana/tempo:2.4.1
+    restart: unless-stopped
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes:
+      - ./../observability/tempo/tempo.yaml:/etc/tempo.yaml:ro
+    ports:
+      - "3200:3200"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.101.0
+    restart: unless-stopped
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+    command:
+      - "--config=/etc/otelcol/config.yaml"
+    volumes:
+      - ./../observability/otel/otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP
+
+  gateway:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE_NAME: "@voice-agent/gateway"
+        SERVICE_DIR: services/gateway
+    depends_on:
+      - otel-collector
+      - postgres
+      - redis
+      - livekit
+      - agent
+      - agent_runtime
+    environment:
+      NODE_ENV: development
+      PORT: 8080
+      LOG_LEVEL: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      TWILIO_AUTH_TOKEN: dev-token
+      AGENT_RUNTIME_URL: http://agent_runtime:8090
+      LIVEKIT_HOST: http://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: devsecret
+      LIVEKIT_SIP_URI: sip:ingress@livekit.local
+      LIVEKIT_SIP_USERNAME: ingress
+      LIVEKIT_SIP_PASSWORD: devpass
+    ports:
+      - "8080:8080"
+    develop:
+      watch:
+        - path: ../services/gateway
+          action: rebuild
+
+  agent:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE_NAME: "@voice-agent/agent"
+        SERVICE_DIR: services/agent
+    depends_on:
+      - otel-collector
+      - postgres
+    environment:
+      NODE_ENV: development
+      PORT: 9102
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://voice_agent:voice_agent@postgres:5432/voice_agent
+      QDRANT_URL: http://qdrant:6333
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "9102:9102"
+
+  agent_runtime:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE_NAME: "@voice-agent/agent-runtime"
+        SERVICE_DIR: services/agent_runtime
+    depends_on:
+      - otel-collector
+      - livekit
+      - agent
+      - redis
+    environment:
+      NODE_ENV: development
+      PORT: 8090
+      LOG_LEVEL: info
+      LIVEKIT_HOST: ws://livekit:7880
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: devsecret
+      KNOWLEDGE_SERVICE_URL: http://agent:9102
+      KNOWLEDGE_TIMEOUT_MS: 1500
+      OPENAI_API_KEY: sk-dev-placeholder-1234567890
+      OPENAI_VOICE_MODEL: gpt-4o-mini-tts
+      OPENAI_REALTIME_MODEL: gpt-4.1-mini-realtime-preview
+      DEEPGRAM_API_KEY: dg-dev-placeholder-1234567890
+      DEEPGRAM_MODEL: nova-2-general
+      PROMPT_TEMPLATE_PATH: templates/base_prompt.md
+      METRICS_PREFIX: agent_runtime_
+      REDIS_URL: redis://redis:6379/1
+      MAX_CONCURRENT_CALLS: 25
+    ports:
+      - "8090:8090"
+
+  stt:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE_NAME: "@voice-agent/stt"
+        SERVICE_DIR: services/stt
+    depends_on:
+      - otel-collector
+    environment:
+      NODE_ENV: development
+      PORT: 9101
+      LOG_LEVEL: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "9101:9101"
+
+  tts:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE_NAME: "@voice-agent/tts"
+        SERVICE_DIR: services/tts
+    depends_on:
+      - otel-collector
+    environment:
+      NODE_ENV: development
+      PORT: 9103
+      LOG_LEVEL: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    ports:
+      - "9103:9103"
+
+  kb_ingest:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE_NAME: "@voice-agent/kb-ingest"
+        SERVICE_DIR: services/kb_ingest
+    depends_on:
+      - postgres
+      - qdrant
+      - otel-collector
+    environment:
+      NODE_ENV: development
+      PORT: 9104
+      LOG_LEVEL: info
+      DATABASE_URL: postgres://voice_agent:voice_agent@postgres:5432/voice_agent
+      QDRANT_URL: http://qdrant:6333
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+  metrics:
+    build:
+      context: ..
+      dockerfile: services/Dockerfile
+      args:
+        SERVICE_NAME: "@voice-agent/metrics"
+        SERVICE_DIR: services/metrics
+    depends_on:
+      - otel-collector
+      - gateway
+    environment:
+      NODE_ENV: development
+      PORT: 9105
+      LOG_LEVEL: info
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  grafana_data:

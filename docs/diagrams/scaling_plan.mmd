@@ -1,0 +1,56 @@
+```mermaid
+graph LR
+  subgraph Ingress Layer
+    TwilioSIP[Twilio SIP Trunks]
+    LB[HTTP Load Balancer]
+  end
+
+  subgraph Control Plane (Autoscaled)
+    TG1[Telephony Gateway Pods]
+    TG2[Telephony Gateway Pods]
+    MQ[(Redis / NATS)]
+  end
+
+  subgraph Media Plane
+    LiveKitNode1[LiveKit Node A]
+    LiveKitNode2[LiveKit Node B]
+    LiveKitNode3[LiveKit Node C]
+  end
+
+  subgraph Agent Workers
+    AgentPool1[Agent Runtime Pods]
+    AgentPool2[Agent Runtime Pods]
+  end
+
+  subgraph Data Plane
+    PGVector[(Managed Postgres + pgvector)]
+  end
+
+  subgraph Observability
+    Prom[Prometheus]
+    Loki[Loki]
+    Tempo[Tempo]
+    Grafana[Grafana]
+  end
+
+  TwilioSIP --> TG1
+  TwilioSIP --> TG2
+  LB --> TG1
+  LB --> TG2
+  TG1 --> MQ
+  TG2 --> MQ
+  MQ --> AgentPool1
+  MQ --> AgentPool2
+  AgentPool1 --> LiveKitNode1
+  AgentPool1 --> LiveKitNode2
+  AgentPool2 --> LiveKitNode2
+  AgentPool2 --> LiveKitNode3
+  AgentPool1 --> PGVector
+  AgentPool2 --> PGVector
+  TG1 --> Prom
+  AgentPool1 --> Prom
+  LiveKitNode1 --> Prom
+  Prom --> Grafana
+  Loki --> Grafana
+  Tempo --> Grafana
+```

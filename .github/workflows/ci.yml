@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install dependencies (root workspace)
+        run: pnpm install --recursive
+
+      - name: Run lint (placeholder)
+        run: pnpm lint || echo "TODO: add lint scripts"
+
+      - name: Run tests (placeholder)
+        run: pnpm test || echo "TODO: add test scripts"

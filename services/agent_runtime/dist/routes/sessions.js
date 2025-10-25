@@ -1,0 +1,139 @@
+import { performance } from "node:perf_hooks";
+import { z } from "zod";
+import { callAgent } from "../agent-client.js";
+import { publishLatency } from "../metrics.js";
+import { synthesizeSpeech } from "../tts-client.js";
+const sessionSchema = z.object({
+    callSid: z.string().min(1),
+    roomName: z.string().min(1),
+    participantIdentity: z.string().min(1),
+    livekitToken: z.string().min(1),
+    initialContext: z.record(z.string(), z.unknown()).optional(),
+});
+const conversationTurnSchema = z.object({
+    role: z.enum(["user", "agent", "system"]),
+    content: z.string().min(1),
+    timestamp: z.string().datetime().optional(),
+});
+const utteranceSchema = z.object({
+    utterance: z.string().min(1),
+    conversation: z.array(conversationTurnSchema).default([]),
+    metadata: z.record(z.string(), z.unknown()).optional(),
+    voice: z.string().optional(),
+    language: z.string().optional(),
+});
+export function registerSessionRoutes(router, store, logger) {
+    router.post("/api/sessions", (request, response) => {
+        const parsed = sessionSchema.safeParse(request.body ?? {});
+        if (!parsed.success) {
+            logger.warn({ validationError: parsed.error.format() }, "invalid session bootstrap payload");
+            response.status(400).json({ error: "invalid_session_payload", details: parsed.error.flatten() });
+            return;
+        }
+        const session = store.create(parsed.data);
+        logger.info({ callSid: session.callSid, roomName: session.roomName }, "session created");
+        response.status(202).json({ sessionId: session.id });
+    });
+    router.post("/api/sessions/:id/utterances", async (request, response) => {
+        const sessionId = request.params.id;
+        const session = store.get(sessionId);
+        if (!session) {
+            response.status(404).json({ error: "session_not_found" });
+            return;
+        }
+        const parsed = utteranceSchema.safeParse(request.body ?? {});
+        if (!parsed.success) {
+            logger.warn({ validationError: parsed.error.format(), sessionId }, "invalid utterance payload");
+            response.status(400).json({ error: "invalid_utterance_payload", details: parsed.error.flatten() });
+            return;
+        }
+        const body = parsed.data;
+        const bargeInHandled = store.markUtteranceStart(sessionId);
+        const startedAt = performance.now();
+        const agentRequest = {
+            sessionId,
+            utterance: body.utterance,
+            conversation: body.conversation,
+            metadata: {
+                ...body.metadata,
+                bargeInHandled,
+                participantIdentity: session.participantIdentity,
+                roomName: session.roomName,
+                initialContext: session.initialContext,
+            },
+        };
+        let pipelineLatencyMs = 0;
+        let ttsMarkedComplete = false;
+        let ttsCompletionTimer;
+        try {
+            const agentResponse = await callAgent(agentRequest, logger);
+            await publishLatency({
+                sessionId,
+                callSid: session.callSid,
+                latencyMs: agentResponse.latencyMs,
+                stage: "agent",
+                bargeInHandled,
+            }, logger);
+            const ttsResponse = await synthesizeSpeech({
+                sessionId,
+                text: agentResponse.reply,
+                voice: body.voice,
+                language: body.language,
+                metadata: {
+                    ...agentResponse,
+                    bargeInHandled,
+                },
+            }, logger);
+            pipelineLatencyMs = Number((performance.now() - startedAt).toFixed(2));
+            await publishLatency({
+                sessionId,
+                callSid: session.callSid,
+                latencyMs: pipelineLatencyMs,
+                stage: "pipeline",
+                bargeInHandled,
+            }, logger);
+            const playbackHoldMs = Math.max(ttsResponse.durationMs ?? 0, 50);
+            ttsCompletionTimer = setTimeout(() => {
+                store.markTtsComplete(sessionId);
+            }, playbackHoldMs);
+            ttsMarkedComplete = true;
+            response.json({
+                sessionId,
+                callSid: session.callSid,
+                bargeInHandled,
+                pipelineLatencyMs,
+                agentLatencyMs: agentResponse.latencyMs,
+                reply: agentResponse.reply,
+                usedFallback: agentResponse.usedFallback,
+                citations: agentResponse.citations,
+                initialContext: session.initialContext,
+                tts: {
+                    voice: ttsResponse.voice,
+                    language: ttsResponse.language,
+                    durationMs: ttsResponse.durationMs,
+                    sampleRate: ttsResponse.sampleRate,
+                    metadata: ttsResponse.metadata,
+                },
+            });
+        }
+        catch (error) {
+            logger.error({ err: error, sessionId }, "failed to process utterance");
+            response.status(502).json({ error: "utterance_processing_failed" });
+        }
+        finally {
+            if (!ttsMarkedComplete && ttsCompletionTimer) {
+                clearTimeout(ttsCompletionTimer);
+            }
+            if (!ttsMarkedComplete) {
+                store.markTtsComplete(sessionId);
+            }
+        }
+    });
+    router.delete("/api/sessions/:id", (request, response) => {
+        const sessionId = request.params.id;
+        store.delete(sessionId);
+        logger.info({ sessionId }, "session terminated");
+        response.status(204).send();
+    });
+}
+//# sourceMappingURL=sessions.js.map

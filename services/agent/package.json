@@ -1,0 +1,29 @@
+{
+  "name": "@voice-agent/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@fastify/under-pressure": "^8.5.1",
+    "@qdrant/js-client-rest": "^1.8.1",
+    "@voice-agent/shared": "workspace:*",
+    "dotenv": "^16.4.5",
+    "fastify": "^4.28.1",
+    "pg": "^8.12.0",
+    "pino": "^8.21.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "@types/pg": "^8.11.6",
+    "tsx": "^4.7.0",
+    "typescript": "^5.5.4"
+  }
+}

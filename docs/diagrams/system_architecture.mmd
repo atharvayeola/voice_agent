@@ -1,0 +1,27 @@
+```mermaid
+graph TD
+  Caller((Caller PSTN)) -->|SIP INVITE| TwilioSIP[TWILIO SIP Trunk]
+  TwilioSIP -->|SIP REFER| TelephonyGateway
+  TelephonyGateway -->|REST Webhooks| TelephonyGatewayAPI[Telephony Gateway Service]
+  TelephonyGatewayAPI -->|SIP Dial| LiveKitSIP[LiveKit SIP Ingress]
+  LiveKitSIP -->|WebRTC Audio| LiveKitSFU[LiveKit SFU Cluster]
+  LiveKitSFU -->|Bidirectional Audio| AgentRuntime
+  AgentRuntime -->|STT Stream| Deepgram
+  AgentRuntime -->|LLM Query| OpenAIRealtime[OpenAI Realtime API]
+  AgentRuntime -->|KB Query| KnowledgeSvc[Knowledge Service]
+  KnowledgeSvc -->|Vector Query| PGVector[(Postgres + pgvector)]
+  AgentRuntime -->|TTS Stream| OpenAIVoice[OpenAI Realtime Voice]
+  AgentRuntime -->|Metrics| Observability[Prometheus/Grafana]
+  TelephonyGatewayAPI -->|Metrics| Observability
+  LiveKitSFU -->|Metrics| Observability
+  subgraph Kubernetes Cluster
+    TelephonyGatewayAPI
+    AgentRuntime
+    KnowledgeSvc
+    Observability
+  end
+  subgraph Cloud Infra
+    LiveKitSFU
+    PGVector
+  end
+```

@@ -1,0 +1,23 @@
+# Node / pnpm
+node_modules/
+.pnpm-store/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+
+# Kubernetes
+kubeconfig*
+
+# Secrets
+.env
+.env.*
+
+# macOS
+.DS_Store
