@@ -5,7 +5,7 @@ import { z } from "zod";
 import { callAgent, type AgentRequest } from "../agent-client.js";
 import type { Logger } from "../logger.js";
 import { publishLatency } from "../metrics.js";
-import { SessionStore } from "../session-store.js";
+import { SessionCapacityError, SessionStore } from "../session-store.js";
 import { synthesizeSpeech } from "../tts-client.js";
 
 const sessionSchema = z.object({
@@ -40,9 +40,19 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
       return;
     }
 
-  const session = store.create(parsed.data);
-    logger.info({ callSid: session.callSid, roomName: session.roomName }, "session created");
-    response.status(202).json({ sessionId: session.id });
+    try {
+      const session = store.create(parsed.data);
+      logger.info({ callSid: session.callSid, roomName: session.roomName }, "session created");
+      response.status(202).json({ sessionId: session.id, activeSessions: store.activeCount });
+    } catch (error) {
+      if (error instanceof SessionCapacityError) {
+        logger.warn({ callSid: parsed.data.callSid }, "session capacity reached");
+        response.status(429).json({ error: "session_capacity_reached" });
+        return;
+      }
+
+      throw error;
+    }
   });
 
   router.post("/api/sessions/:id/utterances", async (request: Request, response: Response) => {
@@ -80,7 +90,8 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
 
     let pipelineLatencyMs = 0;
     let ttsMarkedComplete = false;
-      let ttsCompletionTimer: NodeJS.Timeout | undefined;
+    let ttsCompletionTimer: NodeJS.Timeout | undefined;
+    let qualitySample: ReturnType<typeof store.recordLatency>;
 
     try {
       const agentResponse = await callAgent(agentRequest, logger);
@@ -91,6 +102,7 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
           latencyMs: agentResponse.latencyMs,
           stage: "agent",
           bargeInHandled,
+          activeSessions: store.activeCount,
         },
         logger
       );
@@ -110,6 +122,8 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
       );
 
       pipelineLatencyMs = Number((performance.now() - startedAt).toFixed(2));
+      store.recordSuccess(sessionId);
+      qualitySample = store.recordLatency(sessionId, pipelineLatencyMs);
       await publishLatency(
         {
           sessionId,
@@ -117,6 +131,11 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
           latencyMs: pipelineLatencyMs,
           stage: "pipeline",
           bargeInHandled,
+          activeSessions: store.activeCount,
+          jitterMs: qualitySample?.jitterMs,
+          averageLatencyMs: qualitySample?.averageLatencyMs,
+          mos: qualitySample?.mos,
+          packetLossRatio: qualitySample?.packetLossRatio,
         },
         logger
       );
@@ -137,6 +156,7 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
         usedFallback: agentResponse.usedFallback,
         citations: agentResponse.citations,
         initialContext: session.initialContext,
+        quality: qualitySample,
         tts: {
           voice: ttsResponse.voice,
           language: ttsResponse.language,
@@ -146,6 +166,21 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
         },
       });
     } catch (error) {
+      store.recordFailure(sessionId);
+      const failureLatency = Number((performance.now() - startedAt).toFixed(2));
+      await publishLatency(
+        {
+          sessionId,
+          callSid: session.callSid,
+          latencyMs: failureLatency,
+          stage: "pipeline",
+          bargeInHandled,
+          activeSessions: store.activeCount,
+          failed: true,
+        },
+        logger
+      );
+
       logger.error({ err: error, sessionId }, "failed to process utterance");
       response.status(502).json({ error: "utterance_processing_failed" });
     } finally {

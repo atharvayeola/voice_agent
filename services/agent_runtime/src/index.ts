@@ -26,6 +26,11 @@ for (const signal of shutdownSignals) {
         return;
       }
 
+      const cleanupTimer = app.locals.sessionCleanupTimer as NodeJS.Timeout | undefined;
+      if (cleanupTimer) {
+        clearInterval(cleanupTimer);
+      }
+
       logger.info("agent runtime shut down gracefully");
       process.exit(0);
     });

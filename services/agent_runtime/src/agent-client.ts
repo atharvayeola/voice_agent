@@ -1,5 +1,6 @@
 import type { Logger } from "./logger.js";
 import { config } from "./config.js";
+import { requestWithRetry } from "./http-client.js";
 
 export type ConversationRole = "user" | "agent" | "system";
 
@@ -34,23 +35,32 @@ export interface AgentResponsePayload {
 }
 
 export async function callAgent(request: AgentRequest, logger: Logger): Promise<AgentResponsePayload> {
-  try {
-    const response = await fetch(new URL("/v1/respond", config.agentServiceUrl), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(request),
-    });
+  return requestWithRetry(
+    async (signal) => {
+      const response = await fetch(new URL("/v1/respond", config.agentServiceUrl), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(request),
+        signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`agent service returned HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`agent service returned HTTP ${response.status}`);
+      }
+
+      const payload = (await response.json()) as AgentResponsePayload;
+      return payload;
+    },
+    {
+      retries: config.maxRequestRetries,
+      timeoutMs: config.requestTimeoutMs,
+      logger,
+      description: "agent_service",
     }
-
-    const payload = (await response.json()) as AgentResponsePayload;
-    return payload;
-  } catch (error) {
+  ).catch((error) => {
     logger.error({ err: error, sessionId: request.sessionId }, "agent request failed");
     throw error;
-  }
+  });
 }

@@ -1,5 +1,6 @@
 import type { Logger } from "./logger.js";
 import { config } from "./config.js";
+import { requestWithRetry } from "./http-client.js";
 
 export interface SynthesizeRequest {
   sessionId: string;
@@ -20,24 +21,36 @@ export interface SynthesizeResult {
   metadata: Record<string, unknown>;
 }
 
-export async function synthesizeSpeech(request: SynthesizeRequest, logger: Logger): Promise<SynthesizeResult> {
-  try {
-    const response = await fetch(new URL("/v1/synthesize", config.ttsServiceUrl), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify(request),
-    });
+export async function synthesizeSpeech(
+  request: SynthesizeRequest,
+  logger: Logger
+): Promise<SynthesizeResult> {
+  return requestWithRetry(
+    async (signal) => {
+      const response = await fetch(new URL("/v1/synthesize", config.ttsServiceUrl), {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(request),
+        signal,
+      });
 
-    if (!response.ok) {
-      throw new Error(`tts service returned HTTP ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`tts service returned HTTP ${response.status}`);
+      }
+
+      const payload = (await response.json()) as SynthesizeResult;
+      return payload;
+    },
+    {
+      retries: config.maxRequestRetries,
+      timeoutMs: config.requestTimeoutMs,
+      logger,
+      description: "tts_service",
     }
-
-    const payload = (await response.json()) as SynthesizeResult;
-    return payload;
-  } catch (error) {
+  ).catch((error) => {
     logger.error({ err: error, sessionId: request.sessionId }, "tts synthesis failed");
     throw error;
-  }
+  });
 }
