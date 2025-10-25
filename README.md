@@ -176,22 +176,4 @@ Key scaling decisions:
 5. **Phase E – Scale & Resilience:** autoscaling, failover, circuit breakers, Kubernetes hardening.
 6. **Phase F – Load & Demo:** SIPp/Twilio load generation, 100-call soak, demo recording, report packaging.
 
-## Contributing
-The repo targets a PR-driven workflow with pre-commit hooks and CI jobs (lint, unit, integration, load smoke). See `docs/runbook.md` for branching, testing, and deployment guidance.
 
----
-© 2025 Voice Agent Platform. All rights reserved.
-
-## Roadmap (High-Level)
-1. **Phase A – Foundations:** repo scaffold, dev containers, observability stack, secret templates.
-2. **Phase B – Telephony & Media:** LiveKit deployment, Twilio gateways, RTCP metrics, barge-in plumbing.
-3. **Phase C – STT/Agent/TTS:** streaming adapters, dialog policy, RAG integration, latency budgeting.
-4. **Phase D – Observability:** Prometheus/Grafana dashboards, OpenTelemetry spans, MOS estimator.
-5. **Phase E – Scale & Resilience:** autoscaling, failover, circuit breakers, Kubernetes hardening.
-6. **Phase F – Load & Demo:** SIPp/Twilio load generation, 100-call soak, demo recording, report packaging.
-
-## Contributing
-The repo targets a PR-driven workflow with pre-commit hooks and CI jobs (lint, unit, integration, load smoke). See `docs/runbook.md` for branching, testing, and deployment guidance.
-
----
-© 2025 Voice Agent Platform. All rights reserved.
