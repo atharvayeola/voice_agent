@@ -30,6 +30,25 @@ const mosGauge = new Gauge({
   registers: [register],
 });
 
+const jitterHistogram = new Histogram({
+  name: "call_quality_jitter_seconds",
+  help: "Jitter observed over recent pipeline windows",
+  buckets: [0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1],
+  registers: [register],
+});
+
+const packetLossGauge = new Gauge({
+  name: "call_quality_packet_loss_ratio",
+  help: "Packet loss ratio for active sessions",
+  registers: [register],
+});
+
+const activeSessionsGauge = new Gauge({
+  name: "agent_active_sessions",
+  help: "Number of active sessions tracked by the runtime",
+  registers: [register],
+});
+
 const app = Fastify({ logger: { level: LOG_LEVEL, name: SERVICE_NAME } });
 
 app.get("/healthz", async () => ({ status: "ok" }));
@@ -41,8 +60,11 @@ app.get("/metrics", async (_request: FastifyRequest, reply: FastifyReply) => {
 
 type TurnIngestPayload = {
   latencySeconds?: number;
+  jitterSeconds?: number;
+  packetLossRatio?: number;
   mos?: number;
   callFailed?: boolean;
+  metadata?: Record<string, unknown>;
 };
 
 app.post<{ Body: TurnIngestPayload }>(
@@ -51,10 +73,19 @@ app.post<{ Body: TurnIngestPayload }>(
     request: FastifyRequest<{ Body: TurnIngestPayload }>,
     reply: FastifyReply
   ) => {
-    const { latencySeconds, mos, callFailed } = request.body ?? {};
+    const { latencySeconds, jitterSeconds, packetLossRatio, mos, callFailed, metadata } =
+      request.body ?? {};
 
     if (typeof latencySeconds === "number") {
       agentTurnLatency.observe(latencySeconds);
+    }
+
+    if (typeof jitterSeconds === "number") {
+      jitterHistogram.observe(jitterSeconds);
+    }
+
+    if (typeof packetLossRatio === "number") {
+      packetLossGauge.set(packetLossRatio);
     }
 
     if (typeof mos === "number") {
@@ -63,6 +94,11 @@ app.post<{ Body: TurnIngestPayload }>(
 
     if (callFailed === true) {
       callSetupFailures.inc();
+    }
+
+    const activeSessions = metadata?.activeSessions;
+    if (typeof activeSessions === "number" && Number.isFinite(activeSessions)) {
+      activeSessionsGauge.set(activeSessions);
     }
 
     reply.code(202).send({ status: "accepted" });

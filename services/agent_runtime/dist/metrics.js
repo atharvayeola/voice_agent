@@ -9,12 +9,19 @@ export async function publishLatency(sample, logger) {
             },
             body: JSON.stringify({
                 latencySeconds,
+                jitterSeconds: typeof sample.jitterMs === "number" ? Number((sample.jitterMs / 1000).toFixed(3)) : undefined,
+                packetLossRatio: sample.packetLossRatio,
+                mos: sample.mos,
+                callFailed: sample.failed === true,
                 metadata: {
                     sessionId: sample.sessionId,
                     callSid: sample.callSid,
                     stage: sample.stage,
                     bargeInHandled: sample.bargeInHandled,
                     latencyTargetMs: config.latencyTargetMs,
+                    averageLatencyMs: sample.averageLatencyMs,
+                    jitterMs: sample.jitterMs,
+                    activeSessions: sample.activeSessions,
                 },
             }),
         });

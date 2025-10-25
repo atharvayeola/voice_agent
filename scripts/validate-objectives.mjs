@@ -3,6 +3,7 @@ import { performance } from "node:perf_hooks";
 
 const BASE_URL = process.env.AGENT_RUNTIME_URL ?? "http://localhost:8090";
 const PIPELINE_LATENCY_TARGET = Number(process.env.PIPELINE_LATENCY_TARGET ?? "600");
+const CONCURRENCY_TARGET = Number(process.env.CONCURRENCY_TARGET ?? "100");
 
 async function main() {
   console.log("🔍 Validating voice-agent objectives against", BASE_URL);
@@ -46,43 +47,47 @@ async function main() {
 }
 
 async function runConcurrentSessions() {
-  const sessionA = await createSession("CALL_CONCURRENT_A");
-  const sessionB = await createSession("CALL_CONCURRENT_B");
+  const sessionPromises = Array.from({ length: CONCURRENCY_TARGET }, (_, index) =>
+    createSession(`CALL_CONCURRENT_${index.toString().padStart(3, "0")}`)
+  );
+  const sessions = await Promise.all(sessionPromises);
 
   const start = performance.now();
-  const [turnA, turnB] = await Promise.all([
-    sendUtterance(sessionA.sessionId, "Concurrent request A", sessionA.callSid),
-    sendUtterance(sessionB.sessionId, "Concurrent request B", sessionB.callSid),
-  ]);
+  const turns = await Promise.all(
+    sessions.map((session, index) =>
+      sendUtterance(session.sessionId, `Concurrent request ${index + 1}`, session.callSid)
+    )
+  );
   const elapsed = Number((performance.now() - start).toFixed(2));
 
-  const detail = `Responses completed in ${elapsed}ms (A ${turnA.pipelineLatencyMs}ms, B ${turnB.pipelineLatencyMs}ms)`;
+  const successfulTurns = turns.filter((turn) => turn.success);
+  const ok = successfulTurns.length === CONCURRENCY_TARGET;
+  const detail = `${successfulTurns.length}/${CONCURRENCY_TARGET} turns completed in ${elapsed}ms`;
 
   return {
-    ok: turnA.success && turnB.success,
+    ok,
     detail,
-    samples: [turnA, turnB],
+    samples: successfulTurns,
   };
 }
 
 async function runLatencyProbe(samples) {
-  const overBudget = samples.filter((sample) => sample.pipelineLatencyMs > PIPELINE_LATENCY_TARGET);
-
-  if (overBudget.length > 0) {
-    const detail = overBudget
-      .map((sample) => `${sample.callSid}: ${sample.pipelineLatencyMs}ms`)
-      .join(", ");
+  if (samples.length === 0) {
     return {
       ok: false,
-      detail,
+      detail: "no successful samples recorded",
     };
   }
 
-  const detail = samples
-    .map((sample) => `${sample.callSid}: ${sample.pipelineLatencyMs}ms (agent ${sample.agentLatencyMs}ms)`)
-    .join(", ");
+  const pipelineLatencies = samples.map((sample) => sample.pipelineLatencyMs);
+  const average = pipelineLatencies.reduce((sum, value) => sum + value, 0) / pipelineLatencies.length;
+  const p95 = percentile(pipelineLatencies, 0.95);
+
+  const ok = average <= PIPELINE_LATENCY_TARGET && p95 <= PIPELINE_LATENCY_TARGET;
+
+  const detail = `avg ${average.toFixed(2)}ms, p95 ${p95.toFixed(2)}ms across ${samples.length} samples`;
   return {
-    ok: true,
+    ok,
     detail,
   };
 }
@@ -207,12 +212,23 @@ async function sendUtterance(sessionId, utterance, callSid, options = {}) {
     pipelineLatencyMs: body.pipelineLatencyMs,
     agentLatencyMs: body.agentLatencyMs,
     bargeInHandled: body.bargeInHandled === true,
+    quality: body.quality,
     detail: body,
   };
 }
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function percentile(values, p) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))));
+  return sorted[index];
 }
 
 await main();
