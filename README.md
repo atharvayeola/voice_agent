@@ -76,11 +76,11 @@ flowchart LR
    Metrics -->|Prom| Grafana[(Grafana)]
 
    subgraph Services
-      Gateway[@voice-agent/gateway]
-      AgentRuntime[@voice-agent/agent-runtime]
-      AgentService[@voice-agent/agent]
-      TTSService[@voice-agent/tts]
-      Metrics[@voice-agent/metrics]
+      GatewaySvc["@voice-agent/gateway"]
+      AgentRuntimeSvc["@voice-agent/agent-runtime"]
+      AgentServiceSvc["@voice-agent/agent"]
+      TTSServiceSvc["@voice-agent/tts"]
+      MetricsSvc["@voice-agent/metrics"]
    end
 ```
 
@@ -122,22 +122,22 @@ flowchart TD
    end
 
    subgraph Control Plane
-      GatewayCluster[Gateway (Fastify) HPA]
-      AgentRuntimeCluster[Agent Runtime HPA]
-      MetricsCluster[Metrics Service]
+      GatewayCluster["Gateway (Fastify) HPA"]
+      AgentRuntimeCluster["Agent Runtime HPA"]
+      MetricsCluster["Metrics Service"]
    end
 
    subgraph Data Plane
-      LiveKitCluster[LiveKit Cluster]
-      STTWorkers[STT Workers / Vendor]
-      TTSWorkers[TTS Workers / Vendor]
-      AgentWorkers[Agent Pods]
+      LiveKitCluster["LiveKit Cluster"]
+      STTWorkers["STT Workers / Vendor"]
+      TTSWorkers["TTS Workers / Vendor"]
+      AgentWorkers["Agent Pods"]
    end
 
    subgraph Storage
-      PostgresHA[Postgres HA]
-      QdrantHA[Qdrant Cluster]
-      ObjectStore[Object Storage]
+      PostgresHA["Postgres HA"]
+      QdrantHA["Qdrant Cluster"]
+      ObjectStore["Object Storage"]
    end
 
    TwilioPSTN --> GatewayCluster
