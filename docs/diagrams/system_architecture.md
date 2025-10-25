@@ -1,26 +1,26 @@
 # System Architecture
 
 ```mermaid
-graph LR
-  PSTN["PSTN Caller"] -->|SIP Trunk| Twilio[Twilio SIP Ingress]
-  Twilio --> Gateway
-  Gateway -->|Room Control| LiveKit[(LiveKit SFU)]
-  Gateway -->|Session Events| MetricsSvc
-  LiveKit --> Agent
-  Agent --> STT
-  Agent -->|RAG Query| KB[Qdrant + Postgres]
-  Agent --> TTS
-  STT --> Agent
-  TTS --> LiveKit
-  MetricsSvc --> Prometheus
-  LiveKit --> MetricsSvc
-  Gateway --> Otel[OTel Collector]
-  Agent --> Otel
-  STT --> Otel
-  TTS --> Otel
-  Otel --> Tempo
-  Otel --> Loki
-  Prometheus --> Grafana
-  Tempo --> Grafana
-  Loki --> Grafana
+flowchart LR
+  Twilio["Twilio PSTN"] -->|Webhook / SIP| Gateway["@voice-agent/gateway"]
+  Gateway -->|Control| LiveKit[(LiveKit Cloud)]
+  Gateway -->|REST| AgentRuntime["@voice-agent/agent-runtime"]
+  AgentRuntime -->|HTTP| AgentService["@voice-agent/agent"]
+  AgentRuntime -->|HTTP| TTSService["@voice-agent/tts"]
+  AgentRuntime -->|Metrics| MetricsSvc["@voice-agent/metrics"]
+  AgentService -->|SQL| Postgres[(Postgres)]
+  AgentService -->|Vector| Qdrant[(Qdrant)]
+  AgentService -->|LLM| OpenAI[(OpenAI)]
+  AgentRuntime -->|STT| Deepgram[(Deepgram)]
+  AgentRuntime -->|Media Tokens| LiveKit
+  TTSService -->|Audio| LiveKit
+  MetricsSvc -->|Prom| Grafana[(Grafana)]
+
+  subgraph Services
+    Gateway
+    AgentRuntime
+    AgentService
+    TTSService
+    MetricsSvc
+  end
 ```

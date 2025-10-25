@@ -1,46 +1,41 @@
 # Scaling Plan
 
 ```mermaid
-graph TD
-  subgraph ControlPlane[Control Plane]
-    HPA[Horizontal Pod Autoscalers]
-    Queue[Call Session Queue]
-    MetricsAPI[Custom Metrics API]
+flowchart TD
+  subgraph Edge
+    TwilioPSTN["Twilio PSTN Numbers"]
+    SIPIngress["LiveKit SIP Ingress"]
   end
 
-  subgraph DataPlane[Data Plane]
-    GatewayPool[Gateway Pods]
-    AgentWorkers[Agent Worker Pods]
-    STTPool[STT Adapter Pods]
-    TTSPool[TTS Adapter Pods]
-    MetricsSvc[Metrics Aggregator]
+  subgraph ControlPlane["Control Plane"]
+    GatewayCluster["Gateway (Fastify) HPA"]
+    AgentRuntimeCluster["Agent Runtime HPA"]
+    MetricsCluster["Metrics Service"]
   end
 
-  subgraph Infra[Infra Layer]
-    K8s[Kubernetes Cluster]
-    Redis[(Redis Session Store)]
-    Postgres[(Postgres + Vector)]
-    LiveKit[(LiveKit Cluster)]
+  subgraph DataPlane["Data Plane"]
+    LiveKitCluster["LiveKit Cluster"]
+    STTWorkers["STT Workers / Vendor"]
+    TTSWorkers["TTS Workers / Vendor"]
+    AgentWorkers["Agent Pods"]
   end
 
-  HPA --> GatewayPool
-  HPA --> AgentWorkers
-  HPA --> STTPool
-  HPA --> TTSPool
-  MetricsSvc --> MetricsAPI
-  MetricsAPI --> HPA
-  Queue --> AgentWorkers
-  GatewayPool --> Queue
-  AgentWorkers --> Redis
-  AgentWorkers --> Postgres
-  GatewayPool --> Redis
-  GatewayPool --> LiveKit
-  STTPool --> LiveKit
-  TTSPool --> LiveKit
-  LiveKit --> MetricsSvc
-  K8s --> GatewayPool
-  K8s --> AgentWorkers
-  K8s --> STTPool
-  K8s --> TTSPool
-  K8s --> MetricsSvc
+  subgraph Storage
+    PostgresHA["Postgres HA"]
+    QdrantHA["Qdrant Cluster"]
+    ObjectStore["Object Storage"]
+  end
+
+  TwilioPSTN --> GatewayCluster
+  GatewayCluster --> SIPIngress
+  SIPIngress --> LiveKitCluster
+  GatewayCluster --> AgentRuntimeCluster
+  AgentRuntimeCluster --> AgentWorkers
+  AgentRuntimeCluster --> STTWorkers
+  AgentRuntimeCluster --> TTSWorkers
+  AgentWorkers --> PostgresHA
+  AgentWorkers --> QdrantHA
+  MetricsCluster --> ObjectStore
+  GatewayCluster -. autoscale metrics .-> MetricsCluster
+  LiveKitCluster -. autoscale metrics .-> MetricsCluster
 ```
