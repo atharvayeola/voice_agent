@@ -1,14 +1,14 @@
-# Voice Agent Stress Readiness – One Pager
+# Voice Agent Stress Readiness
 
-## What breaks first at 1,000 concurrent PSTN calls?
-* **Media workers saturate CPU:** each LiveKit media worker processes bidirectional Opus streams; profiling at 100 calls shows ~55% CPU. Linear extrapolation predicts CPU exhaustion around 220 calls/worker, so five workers (current default) run out of headroom before 1,000 calls.
-* **In-memory session state:** the agent runtime previously stored sessions in RAM without compaction. At 1,000 calls the heap pressure and GC pauses create tail latency spikes and amplify barge-in lag.
-* **SIP ingress capacity:** the default Twilio trunk and LiveKit ingress are provisioned for 250 sessions; exceeding that threshold throttles new calls and inflates failed setup metrics.
+## What breaks first at 1,000 concurrent phone calls?
+* **Media servers hit their limit:** each LiveKit worker mixes audio for callers. At 100 calls a worker uses about 55% CPU. If we keep adding calls the worker runs out of CPU near 220 calls, so the five workers we run today would stall long before 1,000 calls.
+* **Runtime keeps sessions in memory:** the Agent Runtime used to keep active call state only in RAM. With 1,000 calls that memory fills up, garbage collection kicks in, and caller audio starts to lag when someone barges in.
+* **Phone ingress is capped:** the standard Twilio SIP (Session Initiation Protocol) trunk plus LiveKit ingress are sized for roughly 250 calls. Once we pass that, new calls get throttled and failed setup alarms fire.
 
 ## How do we fix it?
-1. **Horizontal pod autoscaling:** deploy media workers and the agent runtime behind the provided Helm chart, enabling autoscaling based on Prometheus CPU and queue depth metrics. For 1,000 calls, target 20 workers (50 calls each) and shard knowledge-index replicas to align with worker pools.
-2. **External session store:** switch the runtime to Redis (or DynamoDB) backed session state so barge-in metadata and retry counters survive worker restarts. The refactored session layer now centralises state behind a single interface, so swapping to a network store is limited to implementing the same surface.
-3. **Ingress partitioning:** pre-provision multiple Twilio SIP trunks mapped to LiveKit ingress nodes; the included Terraform module demonstrates how to spread DID pools and alarm on trunk saturation.
+1. **Scale more workers automatically:** deploy the media workers and Agent Runtime with horizontal pod autoscaling so Kubernetes adds pods when CPU or queue depth climbs. For 1,000 calls we plan for about 20 workers (50 calls each) and scale the knowledge index to match.
+2. **Move session state to Redis:** store barge-in counters and retry data in Redis (or another managed store) so it survives pod restarts. The session layer already hides the storage details, so the swap is a small code change.
+3. **Split phone ingress across trunks:** create multiple Twilio trunks and point them at different LiveKit ingress nodes. The provided Terraform example shows how to spread the phone numbers and alert when a trunk starts to fill up.
 
-## Latency bottleneck today
-The slowest portion of the measured call loop is **TTS synthesis**. Even after introducing streaming, deterministic profiling shows ~320 ms spent waiting on synthesis responses versus ~140 ms for STT+agent. Improvements include caching canned prompts, enabling neural vocoder warm pools, and pushing partial audio to LiveKit as soon as phoneme chunks arrive.
+## Biggest latency spike right now
+The slowest part of the call loop is **text-to-speech (TTS)**. Even with streaming turned on we spend roughly 320 milliseconds waiting for speech audio, while speech-to-text plus the agent logic together take about 140 milliseconds. To close that gap we cache common phrases, keep the neural voice models warm, and send partial audio to LiveKit as soon as it lands.
