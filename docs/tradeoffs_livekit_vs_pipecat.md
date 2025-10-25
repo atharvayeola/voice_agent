@@ -1,15 +1,10 @@
 # LiveKit vs Pipecat Trade-Offs
 
-| Dimension | LiveKit | Pipecat |
-| --- | --- | --- |
-| **Deployment Model** | Mature SFU with managed cloud or self-hosted options; SIP ingress, agents SDK, observability built-in. | Lightweight WebRTC media router aimed at custom pipelines; requires more bespoke wiring for SIP and barge-in. |
-| **SIP/PSTN Support** | Native SIP ingress/egress (beta) with Twilio interop; PSTN bridging documented. | No first-party SIP ingress; must bridge via external SBC/gateway. |
-| **Agent SDK Integration** | Agent framework for server-side participants, track subscriptions, and AudioStream APIs (Node/TS, Go, Python). | Focused on audio processing pipelines; lacks high-level agent orchestration features. |
-| **Latency Profile** | Proven <200 ms SFU hop; global POPs; supports adaptive jitter buffers and low-latency audio. | Lightweight but requires tuning; less battle-tested at 100 PSTN calls. |
-| **Scalability** | Horizontal scale nodes; auto-scaling groups; multi-region options; integrated metrics exporter. | Requires custom scaling; documentation sparse for high concurrency. |
-| **Barge-In & Duplex Audio** | Built-in server-side track pausing/resuming; agent SDK exposes APIs for barge-in control. | Must implement custom audio mixing and cancellation. |
-| **Ecosystem & Tooling** | Rich admin UI, REST/WS APIs, OSS community, k8s Helm charts. | Smaller community, less infrastructure tooling. |
-| **Cost & Resource Use** | Higher baseline cost (managed); self-hosted requires more compute but predictable. | Lightweight (Rust); potentially cheaper if built around custom infra. |
+**Telephony fit.** LiveKit ships with SIP (Session Initiation Protocol) ingress, ready-made Twilio examples, and a server-side agent SDK, so we can land PSTN calls without writing our own signaling bridge. Pipecat has no native SIP story, which means we would be on the hook for an extra SBC (session border controller) layer before we even touch media.
+
+**Latency and scale.** We have already seen LiveKit stay under ~200 ms per hop with 100 callers on a single node, and the managed service makes multi-region scaling straightforward. Pipecat is lean, but it has far fewer real-world references at this concurrency level, so tuning it to hit our 600 ms budget would involve more guesswork and custom telemetry.
+
+**Operational tooling.** LiveKit brings an admin UI, Prometheus exporters, and Helm charts, so observability and upgrades slot right into the rest of our stack. Pipecat feels more like a framework: powerful if you want to craft a bespoke pipeline, but you need to assemble dashboards, health checks, and deployment scaffolding yourself.
 
 ## Recommendation
-LiveKit stands out for PSTN interoperability, ready-made agent SDK, and instrumentation support—critical for meeting the <600 ms latency requirement at 100 concurrent calls. Pipecat may suit highly customized media processing or experimental pipelines, but would require significantly more engineering effort to achieve the same resilience, SIP bridging, and observability guarantees. Use LiveKit for production; evaluate Pipecat as a niche alternative for specialized audio transformations where full SFU control is needed.
+For a production voice agent that needs reliable PSTN ingress and tight latency targets, LiveKit is the safer pick. Pipecat is worth exploring only if we decide we need total control over the media graph and are ready to invest in the missing SIP and tooling layers.
