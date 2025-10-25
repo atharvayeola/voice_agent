@@ -67,8 +67,4 @@ Design and deploy a production-grade voice AI agent capable of serving 100 concu
 - Security: SIP/TLS, SRTP between LiveKit and agents, secrets via HashiCorp Vault or k8s secrets (sealed secrets for git storage).
 - Compliance considerations: Call recording policies, PII handling, GDPR deletion workflow (pending design).
 
-## Next Steps
-1. Prepare repo scaffolding (services folders, infrastructure directory, CI skeleton).
-2. Create initial architecture diagram drafts (system & call flow).
-3. Begin telephony ingress implementation: Twilio SIP configuration + LiveKit SIP ingress prototype.
-4. Stand up baseline observability stack manifests.
+
