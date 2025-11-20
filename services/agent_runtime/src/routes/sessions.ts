@@ -140,11 +140,11 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
         logger
       );
 
-        const playbackHoldMs = Math.max(ttsResponse.durationMs ?? 0, 50);
-        ttsCompletionTimer = setTimeout(() => {
-          store.markTtsComplete(sessionId);
-        }, playbackHoldMs);
-        ttsMarkedComplete = true;
+      const playbackHoldMs = Math.max(ttsResponse.durationMs ?? 0, 50);
+      ttsCompletionTimer = setTimeout(() => {
+        store.markTtsComplete(sessionId);
+      }, playbackHoldMs);
+      ttsMarkedComplete = true;
 
       response.json({
         sessionId,
@@ -192,6 +192,33 @@ export function registerSessionRoutes(router: Router, store: SessionStore, logge
         store.markTtsComplete(sessionId);
       }
     }
+  });
+
+  router.get("/api/sessions/:id", (request: Request, response: Response) => {
+    const sessionId = request.params.id;
+    const session = store.get(sessionId);
+
+    if (!session) {
+      response.status(404).json({ error: "session_not_found" });
+      return;
+    }
+
+    // Return comprehensive session metrics
+    response.json({
+      sessionId: session.id,
+      callSid: session.callSid,
+      roomName: session.roomName,
+      participantIdentity: session.participantIdentity,
+      createdAt: session.createdAt,
+      lastUtteranceAt: session.lastUtteranceAt,
+      ttsInFlight: session.ttsInFlight,
+      bargeInCount: session.bargeInCount,
+      latencyTimeline: session.latencyTimeline,
+      lastQualitySample: session.lastQualitySample,
+      consecutiveFailures: session.consecutiveFailures,
+      totalTurns: session.totalTurns,
+      failedTurns: session.failedTurns,
+    });
   });
 
   router.delete("/api/sessions/:id", (request: Request, response: Response) => {

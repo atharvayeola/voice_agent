@@ -9,7 +9,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
 
   qdrant:
     image: qdrant/qdrant:v1.9.1
@@ -36,8 +36,7 @@ services:
     depends_on:
       - redis
     environment:
-      LIVEKIT_API_KEY: devkey
-      LIVEKIT_API_SECRET: devsecret
+      LIVEKIT_KEYS: "devkey: devsecret"
       LIVEKIT_LOG_LEVEL: info
       LIVEKIT_REDIS_ADDRESS: redis:6379
       LIVEKIT_WEBHOOK_URL: http://gateway:8080/livekit/webhook
@@ -175,6 +174,11 @@ services:
       LIVEKIT_HOST: ws://livekit:7880
       LIVEKIT_API_KEY: devkey
       LIVEKIT_API_SECRET: devsecret
+      AGENT_RUNTIME_URL: http://agent_runtime:8090
+      # Twilio Configuration (set these in your .env file)
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
       KNOWLEDGE_SERVICE_URL: http://agent:9102
       KNOWLEDGE_TIMEOUT_MS: 1500
       OPENAI_API_KEY: sk-dev-placeholder-1234567890

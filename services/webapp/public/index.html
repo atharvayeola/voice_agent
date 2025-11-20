@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="Voice Agent AI Platform - Real-time voice conversations with AI featuring sub-600ms latency">
+    <meta name="keywords" content="voice AI, real-time AI, voice agent, WebRTC, LiveKit">
+    <title>Voice Agent Platform | Real-Time AI Conversations</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/styles.css">
+
+    <!-- LiveKit Client SDK from jsDelivr (more reliable) -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.5.8/dist/livekit-client.umd.min.js" crossorigin></script>
+
+    <!-- Debug script to check what's available -->
+    <script>
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('Available globals:', {
+                LivekitClient: typeof LivekitClient,
+                LiveKit: typeof LiveKit,
+                windowLivekitClient: typeof window.LivekitClient,
+                windowLiveKit: typeof window.LiveKit
+            });
+        });
+    </script>
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">🎙️</div>
+                    <h1>Voice Agent</h1>
+                </div>
+                <div class="header-status">
+                    <span class="status-indicator" id="connection-status">Ready</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Call Control Panel -->
+            <section class="control-panel glass-card">
+                <div class="call-controls">
+                    <div class="call-header">
+                        <h2>Voice Call Controls</h2>
+                        <div class="call-state" id="call-state">Idle</div>
+                    </div>
+
+                    <div class="audio-visualizer" id="audio-visualizer">
+                        <canvas id="visualizer-canvas" width="400" height="100"></canvas>
+                        <div class="visualizer-overlay">Speak to see your voice</div>
+                    </div>
+
+                    <div class="control-buttons">
+                        <button id="start-call-btn" class="btn btn-primary">
+                            <span class="btn-icon">📞</span>
+                            <span class="btn-text">Start Call</span>
+                        </button>
+                        <button id="mute-btn" class="btn btn-secondary" disabled>
+                            <span class="btn-icon">🎤</span>
+                            <span class="btn-text">Mute</span>
+                        </button>
+                        <button id="end-call-btn" class="btn btn-danger" disabled>
+                            <span class="btn-icon">📵</span>
+                            <span class="btn-text">End Call</span>
+                        </button>
+                    </div>
+
+                    <!-- Outbound Calling (Twilio) -->
+                    <div class="outbound-section">
+                        <h3>📞 Make Outbound Call</h3>
+                        <p class="outbound-note">Call a verified phone number using Twilio</p>
+                        <div class="outbound-controls">
+                            <input type="tel" id="phone-number-input" placeholder="+1234567890" class="phone-input" />
+                            <button id="call-phone-btn" class="btn btn-primary">
+                                <span class="btn-icon">📱</span>
+                                <span class="btn-text">Call Number</span>
+                            </button>
+                        </div>
+                        <p class="help-text">
+                            💡 <strong>Trial Mode:</strong> You can only call
+                            <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/verified"
+                                target="_blank">verified numbers</a>
+                        </p>
+                    </div>
+
+                    <div class="session-info" id="session-info" style="display: none;">
+                        <div class="info-item">
+                            <span class="info-label">Session ID:</span>
+                            <span class="info-value" id="session-id-display">-</span>
+                        </div>
+                        <div class="info-item">
+                            <span class="info-label">Duration:</span>
+                            <span class="info-value" id="call-duration">00:00</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Real-Time Metrics Dashboard -->
+            <section class="metrics-dashboard">
+                <div class="metrics-header">
+                    <h2>Performance Metrics</h2>
+                    <div class="metrics-refresh">
+                        <span class="refresh-indicator" id="metrics-refresh">●</span>
+                        <span class="refresh-text">Live</span>
+                    </div>
+                </div>
+
+                <div class="metrics-grid">
+                    <!-- Pipeline Latency -->
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon">⚡</div>
+                        <div class="metric-content">
+                            <div class="metric-label">Pipeline Latency</div>
+                            <div class="metric-value" id="metric-pipeline-latency">-</div>
+                            <div class="metric-unit">milliseconds</div>
+                            <div class="metric-status" id="metric-pipeline-status">Waiting...</div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Latency -->
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon">🤖</div>
+                        <div class="metric-content">
+                            <div class="metric-label">Agent Processing</div>
+                            <div class="metric-value" id="metric-agent-latency">-</div>
+                            <div class="metric-unit">milliseconds</div>
+                        </div>
+                    </div>
+
+                    <!-- Average Latency -->
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon">📊</div>
+                        <div class="metric-content">
+                            <div class="metric-label">Average Latency</div>
+                            <div class="metric-value" id="metric-avg-latency">-</div>
+                            <div class="metric-unit">milliseconds</div>
+                        </div>
+                    </div>
+
+                    <!-- Jitter -->
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon">📈</div>
+                        <div class="metric-content">
+                            <div class="metric-label">Jitter</div>
+                            <div class="metric-value" id="metric-jitter">-</div>
+                            <div class="metric-unit">milliseconds</div>
+                        </div>
+                    </div>
+
+                    <!-- MOS Score -->
+                    <div class="metric-card glass-card highlight">
+                        <div class="metric-icon">⭐</div>
+                        <div class="metric-content">
+                            <div class="metric-label">MOS Score</div>
+                            <div class="metric-value large" id="metric-mos">-</div>
+                            <div class="metric-unit">out of 5.0</div>
+                        </div>
+                    </div>
+
+                    <!-- Barge-in Count -->
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon">🔄</div>
+                        <div class="metric-content">
+                            <div class="metric-label">Barge-in Events</div>
+                            <div class="metric-value" id="metric-bargein">0</div>
+                            <div class="metric-unit">interruptions</div>
+                        </div>
+                    </div>
+
+                    <!-- Success Rate -->
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon">✅</div>
+                        <div class="metric-content">
+                            <div class="metric-label">Success Rate</div>
+                            <div class="metric-value" id="metric-success-rate">-</div>
+                            <div class="metric-unit">percentage</div>
+                        </div>
+                    </div>
+
+                    <!-- Packet Loss -->
+                    <div class="metric-card glass-card">
+                        <div class="metric-icon">📡</div>
+                        <div class="metric-content">
+                            <div class="metric-label">Packet Loss</div>
+                            <div class="metric-value" id="metric-packet-loss">-</div>
+                            <div class="metric-unit">ratio</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>Voice Agent Platform © 2025 | Powered by LiveKit, Deepgram, OpenAI</p>
+        </footer>
+    </div>
+
+    <!-- Error Toast -->
+    <div class="toast" id="error-toast">
+        <div class="toast-content">
+            <span class="toast-icon">⚠️</span>
+            <span class="toast-message" id="toast-message"></span>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="/livekit-client.js"></script>
+    <script src="/app.js"></script>
+</body>
+
+</html>
