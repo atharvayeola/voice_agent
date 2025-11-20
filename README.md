@@ -1,6 +1,8 @@
 # 🎙️ Voice Agent Platform
 
 A production-ready, real-time voice AI platform featuring sub-600ms latency, PSTN integration, and comprehensive performance monitoring. Built with LiveKit, OpenAI, and Deepgram.
+<img width="1369" height="841" alt="image" src="https://github.com/user-attachments/assets/df245b97-17ad-45f3-8847-5c4d8dc2a977" />
+<img width="1403" height="485" alt="image" src="https://github.com/user-attachments/assets/ca3af957-395a-48f6-8872-3c9004535c1e" />
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)
